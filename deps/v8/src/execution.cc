@@ -361,6 +361,12 @@ bool StackGuard::CheckInterrupt(InterruptFlag flag) {
 
 
 void StackGuard::RequestInterrupt(InterruptFlag flag) {
+  if (!ExecutionAccess::TryLock(isolate_)) {
+    return;
+  }
+
+  ExecutionAccess::Unlock(isolate_);
+
   ExecutionAccess access(isolate_);
   // Check the chain of PostponeInterruptsScopes for interception.
   if (thread_local_.postpone_interrupts_ &&
