@@ -82,6 +82,7 @@ enum class ThreadType {
 
 class Thread {
     friend class ThreadManager;
+    friend class V8InterruptScope;
 public:
     Thread(ThreadManager* thread_mgr, ResourceHandle<EngineThread> ethread);
     ~Thread();
@@ -106,6 +107,8 @@ public:
      */
     bool Run();
 
+
+    void TimerTick();
 
     ThreadManager* thread_manager() const {
         return thread_mgr_;
@@ -254,9 +257,28 @@ private:
     uint32_t parent_promise_id_;
     ResourceHandle<EngineThread> parent_thread_;
 
+    Atomic<bool> v8_interrupt_enabled_;
+    uint32_t irq_ticks_counter_;
+
     UniquePersistentIndexedPool<v8::Value> timeout_data_;
     UniquePersistentIndexedPool<v8::Value> irq_data_;
     UniquePersistentIndexedPool<v8::Promise::Resolver> promises_;
+};
+
+class V8InterruptScope {
+public:
+    V8InterruptScope(Thread* th)
+        :	th_(th) {
+        RT_ASSERT(th_);
+        th->irq_ticks_counter_ = 0;
+        th_->v8_interrupt_enabled_.Set(true);
+    }
+
+    ~V8InterruptScope() {
+        th_->v8_interrupt_enabled_.Set(false);
+    }
+private:
+    Thread* th_;
 };
 
 } // namespace rt

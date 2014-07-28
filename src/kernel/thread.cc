@@ -31,8 +31,10 @@ Thread::Thread(ThreadManager* thread_mgr, ResourceHandle<EngineThread> ethread)
         exports_(this),
         ref_count_(0),
         terminate_(false),
-        parent_promise_id_(0) {
+        parent_promise_id_(0),
+        irq_ticks_counter_(0) {
     priority_.Set(1);
+    v8_interrupt_enabled_.Set(false);
 }
 
 Thread::~Thread() {
@@ -214,6 +216,7 @@ bool Thread::Run() {
             v8::Local<v8::Script> script = v8::ScriptCompiler::Compile(iv8_, &source,
                 v8::ScriptCompiler::CompileOptions::kNoCompileOptions);
             if (!script.IsEmpty()) {
+                V8InterruptScope v8_interrupt(this);
                 script->Run();
             }
         }
@@ -239,6 +242,8 @@ bool Thread::Run() {
                    unpacked,
                    v8::Uint32::NewFromUnsigned(iv8_, message->recv_index()),
                 };
+
+                V8InterruptScope v8_interrupt(this);
                 fnwrap->Call(context->Global(), 4, argv);
             }
         }
@@ -250,6 +255,7 @@ bool Thread::Run() {
             v8::Local<v8::Promise::Resolver> resolver {
                 v8::Local<v8::Promise::Resolver>::New(iv8_, TakePromise(message->recv_index())) };
 
+            V8InterruptScope v8_interrupt(this);
             resolver->Resolve(unpacked);
             iv8_->RunMicrotasks();
         }
@@ -261,6 +267,7 @@ bool Thread::Run() {
             v8::Local<v8::Promise::Resolver> resolver {
                 v8::Local<v8::Promise::Resolver>::New(iv8_, TakePromise(message->recv_index())) };
 
+            V8InterruptScope v8_interrupt(this);
             resolver->Reject(unpacked);
             iv8_->RunMicrotasks();
         }
@@ -270,6 +277,8 @@ bool Thread::Run() {
                 TakeTimeoutData(message->recv_index())) };
             RT_ASSERT(fnv->IsFunction());
             v8::Local<v8::Function> fn { v8::Local<v8::Function>::Cast(fnv) };
+
+            V8InterruptScope v8_interrupt(this);
             fn->Call(context->Global(), 0, nullptr);
         }
             break;
@@ -278,6 +287,8 @@ bool Thread::Run() {
                 GetIRQData(message->recv_index())) };
             RT_ASSERT(fnv->IsFunction());
             v8::Local<v8::Function> fn { v8::Local<v8::Function>::Cast(fnv) };
+
+            V8InterruptScope v8_interrupt(this);
             fn->Call(context->Global(), 0, nullptr);
         }
             break;
@@ -325,6 +336,26 @@ bool Thread::Run() {
 
     trycatch.Reset();
     return true;
+}
+
+void V8InterruptCallback(v8::Isolate* iv8, void* data) {
+    RT_ASSERT(iv8);
+    RT_ASSERT(data);
+
+    Thread* th { static_cast<Thread*>(data) };
+    printf("preempt\n");
+    th->thread_manager()->Preempt();
+}
+
+void Thread::TimerTick() {
+    if (!v8_interrupt_enabled_.Get()) {
+        return;
+    }
+
+    if (++irq_ticks_counter_ > 7) {
+        iv8_->RequestInterrupt(V8InterruptCallback, this);
+        irq_ticks_counter_ = 0;
+    }
 }
 
 } // namespace rt

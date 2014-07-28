@@ -66,13 +66,21 @@ void ThreadManager::ProcessNewThreads() {
     }
 }
 
-void ThreadManager::TimerInterruptNotify() {
+void ThreadManager::TimerInterruptNotify(SystemContextIRQ& irq_context) {
     ticks_counter_.AddFetch(1);
+
+    if (nullptr == current_thread()) {
+        return;
+    }
+
+    current_thread()->TimerTick();
 }
 
 void ThreadManager::Preempt() {
+    Cpu::DisableInterrupts();
     Thread* curr_thread = current_thread();
     Thread* new_thread = SwitchToNextThread();
+    Cpu::EnableInterrupts();
 
     ProcessNewThreads();
 
