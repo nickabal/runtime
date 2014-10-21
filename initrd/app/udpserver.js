@@ -39,7 +39,7 @@
             'Your message: ' + str.replace('\n', ''),
             '\n'
         ];
-
+	console.log(lines);
         var message = lines.join('\n');
 
         var buf = runtime.toBuffer(message);

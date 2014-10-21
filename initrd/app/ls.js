@@ -35,11 +35,11 @@
 
             isolate.env.stdout(name, {fg: color, x: (i % columns) * width / columns});
             if (((columns - 1) === (i % columns)) && (i !== data.length - 1)) {
-                isolate.env.stdout('\n');
+                //isolate.env.stdout('\n');
             }
         }
 
-        isolate.env.stdout('\n');
+       //isolate.env.stdout('\n');
     }
 
     function error(err) {
